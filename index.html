@@ -60,7 +60,10 @@
                 <p>一起把家裡的日常用品準備好吧！<span aria-hidden="true">♥</span></p>
               </div>
             </div>
-            <button id="add-item-button" class="add-button" type="button"><span aria-hidden="true">＋</span> 新增清單</button>
+            <div class="welcome-actions">
+              <button id="manage-categories-button" class="manage-categories-button" type="button"><span aria-hidden="true">⚙</span> 分類管理</button>
+              <button id="add-item-button" class="add-button" type="button"><span aria-hidden="true">＋</span> 新增清單</button>
+            </div>
           </section>
 
           <section class="summary-grid" aria-label="補貨摘要">
@@ -108,10 +111,7 @@
             <input id="item-name" name="name" placeholder="例如：貓砂" maxlength="40" required />
           </label>
           <label class="field">分類
-            <select id="item-category" name="category" required>
-              <option value="貓咪用品">貓咪用品</option>
-              <option value="消耗品">消耗品</option>
-            </select>
+            <select id="item-category" name="category" required></select>
           </label>
           <label class="field">補貨週期（天）
             <input id="item-cycle" name="cycleDays" type="number" min="1" max="999" value="30" required />
@@ -132,6 +132,57 @@
         <div class="modal-actions">
           <button class="secondary-button" type="button" data-close-dialog>取消</button>
           <button class="primary-button" type="submit">儲存項目</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="category-dialog" class="modal category-modal">
+      <form id="category-form" method="dialog">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">CATEGORY MANAGER</p>
+            <h2>分類管理</h2>
+          </div>
+          <button class="close-button" type="button" data-close-category-dialog aria-label="關閉">×</button>
+        </div>
+
+        <section class="category-builder" aria-labelledby="category-editor-title">
+          <div class="category-builder-heading">
+            <span id="category-preview" class="category-preview" aria-hidden="true">📦</span>
+            <div>
+              <p id="category-editor-title">新增自訂分類</p>
+              <small>每個登入 ID 都有自己的分類設定</small>
+            </div>
+          </div>
+          <input id="category-original-name" name="originalName" type="hidden" />
+          <div class="category-form-grid">
+            <label class="field">分類名稱
+              <input id="category-name" name="name" placeholder="例如：食材" maxlength="16" required />
+            </label>
+            <label class="field">分類圖示
+              <input id="category-icon" name="icon" placeholder="例如：🥬" maxlength="8" value="📦" required />
+            </label>
+            <label class="field color-field">分類顏色
+              <span class="color-control">
+                <input id="category-color" name="color" type="color" value="#ffe58f" aria-label="選擇分類顏色" />
+                <span id="category-color-code">#FFE58F</span>
+              </span>
+            </label>
+          </div>
+          <div class="category-editor-actions">
+            <button id="cancel-category-edit" class="secondary-button small-button" type="button" hidden>取消修改</button>
+            <button id="save-category-button" class="primary-button small-button" type="submit">新增分類</button>
+          </div>
+        </section>
+
+        <div class="category-list-heading">
+          <h3>目前分類</h3>
+          <span id="category-total">0 個分類</span>
+        </div>
+        <div id="category-manage-list" class="category-manage-list"></div>
+        <p class="category-help"><span aria-hidden="true">💡</span> 修改分類名稱時，分類內原有品項會一起更新；只有沒有品項的空分類可以刪除。</p>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-close-category-dialog>完成</button>
         </div>
       </form>
     </dialog>
