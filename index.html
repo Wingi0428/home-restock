@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#e9e2ff" />
+    <meta name="description" content="用登入 ID 分開保存資料的家用補貨倒數提醒清單。" />
+    <title>家用補貨提醒</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <noscript>請開啟 JavaScript 以使用補貨清單。</noscript>
+
+    <main id="login-view" class="login-screen">
+      <section class="login-card" aria-labelledby="login-title">
+        <img class="login-art" src="./assets/playful-sticker-assets.png" alt="可愛的貓咪與小屋貼紙" />
+        <p class="eyebrow">HOME RESTOCK</p>
+        <h1 id="login-title">家用補貨提醒</h1>
+        <p class="login-intro">用一個好記的 ID，建立專屬於你的補貨小手帳。</p>
+        <form id="login-form">
+          <label for="login-id">登入 ID</label>
+          <input id="login-id" name="loginId" placeholder="例如：gigi 或 520" maxlength="30" autocomplete="username" required />
+          <button class="primary-button login-button" type="submit">開始記錄 <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="local-note"><span aria-hidden="true">🔒</span> 無須密碼 · 各 ID 資料分開保存在這台裝置的瀏覽器中</p>
+      </section>
+    </main>
+
+    <main id="app-view" class="app-shell" hidden>
+      <div class="app-frame">
+        <header class="topbar">
+          <a class="brand" href="#top" aria-label="回到家用補貨提醒頂端">
+            <span class="brand-mark" aria-hidden="true">⌂<i>✓</i></span>
+            <span>家用補貨提醒</span>
+          </a>
+          <div class="header-actions">
+            <button id="notification-button" class="notification-button" type="button" aria-label="開啟到期通知">
+              <span aria-hidden="true">🔔</span><span class="notification-label">開啟提醒</span>
+            </button>
+            <button id="account-button" class="account-pill" type="button" aria-haspopup="menu" aria-expanded="false">
+              <span class="account-label">登入 ID</span>
+              <strong id="account-id"></strong>
+              <span class="avatar" aria-hidden="true">🐱</span>
+              <span aria-hidden="true">⌄</span>
+            </button>
+            <div id="account-menu" class="account-menu" role="menu" hidden>
+              <button id="switch-id-button" type="button" role="menuitem">⇄　切換 ID</button>
+              <button id="clear-user-data-button" class="danger-text" type="button" role="menuitem">⌫　清除此 ID 資料</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="content" id="top">
+          <section class="welcome-row">
+            <div class="welcome-copy">
+              <span class="welcome-cat" aria-hidden="true">🐱</span>
+              <div>
+                <h1>哈囉，<span id="welcome-id"></span>！</h1>
+                <p>一起把家裡的日常用品準備好吧！<span aria-hidden="true">♥</span></p>
+              </div>
+            </div>
+            <button id="add-item-button" class="add-button" type="button"><span aria-hidden="true">＋</span> 新增清單</button>
+          </section>
+
+          <section class="summary-grid" aria-label="補貨摘要">
+            <article class="summary-card urgent-summary">
+              <span class="summary-icon" aria-hidden="true">▣<i>!</i></span>
+              <div><p>即將到期</p><strong id="due-soon-count">0</strong></div>
+              <p class="summary-note">有 <span id="due-soon-copy">0</span> 項商品即將到期，記得提前補貨喔！</p>
+            </article>
+            <article class="summary-card week-summary">
+              <span class="summary-icon" aria-hidden="true">🛒</span>
+              <div><p>本週補貨</p><strong id="week-count">0</strong></div>
+              <p class="summary-note">本週建議補貨 <span id="week-copy">0</span> 項，讓生活更安心！</p>
+            </article>
+          </section>
+
+          <section id="due-banner" class="due-banner" aria-live="polite" hidden>
+            <span aria-hidden="true">✨</span>
+            <p id="due-banner-text"></p>
+            <button id="dismiss-banner" type="button" aria-label="關閉提醒">×</button>
+          </section>
+
+          <section id="categories-grid" class="categories-grid" aria-label="補貨清單"></section>
+
+          <aside class="tip-strip">
+            <span class="tip-bell" aria-hidden="true">🔔</span>
+            <p><strong>小提醒：</strong>到期提醒會在開啟網站時檢查；允許瀏覽器通知後，手機也會顯示提示。</p>
+            <img class="footer-art" src="./assets/playful-sticker-assets.png" alt="熟睡的三花貓貼紙" />
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <dialog id="item-dialog" class="modal">
+      <form id="item-form" method="dialog">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">RESTOCK ITEM</p>
+            <h2 id="item-dialog-title">新增補貨項目</h2>
+          </div>
+          <button class="close-button" type="button" data-close-dialog aria-label="關閉">×</button>
+        </div>
+        <input id="item-id" name="id" type="hidden" />
+        <div class="form-grid">
+          <label class="field full-field">品項名稱
+            <input id="item-name" name="name" placeholder="例如：貓砂" maxlength="40" required />
+          </label>
+          <label class="field">分類
+            <select id="item-category" name="category" required>
+              <option value="貓咪用品">貓咪用品</option>
+              <option value="消耗品">消耗品</option>
+            </select>
+          </label>
+          <label class="field">補貨週期（天）
+            <input id="item-cycle" name="cycleDays" type="number" min="1" max="999" value="30" required />
+          </label>
+          <label class="field full-field">下次購買日
+            <input id="item-next-date" name="nextDate" type="date" required />
+          </label>
+          <label class="field">常用平台
+            <input id="item-store" name="store" list="store-options" placeholder="例如：蝦皮" maxlength="30" />
+            <datalist id="store-options">
+              <option value="Coupang"></option><option value="Costco"></option><option value="全聯"></option><option value="蝦皮"></option>
+            </datalist>
+          </label>
+          <label class="field">常用購買連結
+            <input id="item-url" name="url" type="url" inputmode="url" placeholder="https://..." />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-close-dialog>取消</button>
+          <button class="primary-button" type="submit">儲存項目</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="modal confirm-modal">
+      <form method="dialog">
+        <span id="confirm-icon" class="confirm-icon" aria-hidden="true">🗑️</span>
+        <h2 id="confirm-title">確定要刪除嗎？</h2>
+        <p id="confirm-message">刪除後將無法復原。</p>
+        <div class="modal-actions centered-actions">
+          <button id="confirm-cancel" class="secondary-button" type="button">先不要</button>
+          <button id="confirm-submit" class="danger-button" type="button">確認刪除</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
