@@ -7,6 +7,10 @@ const NOTIFIED_PREFIX = "home-restock-notified-v1:";
 
 // Category settings are stored separately per ID. Existing item data is never rewritten on migration.
 const CATEGORY_STORAGE_PREFIX = "home-restock-categories-v1:";
+const CLOUD_CONFIG = window.RESTOCK_CLOUD_CONFIG || {};
+const CLOUD_URL = String(CLOUD_CONFIG.url || "").replace(/\/+$/, "");
+const CLOUD_KEY = String(CLOUD_CONFIG.publishableKey || "");
+const CLOUD_ENABLED = /^https:\/\/.+\.supabase\.co$/i.test(CLOUD_URL) && CLOUD_KEY.startsWith("sb_publishable_");
 const DEFAULT_CATEGORIES = [
   { name: "貓咪用品", icon: "🐱", color: "#e9e2ff" },
   { name: "消耗品", icon: "🧻", color: "#bfe8ff" },
@@ -27,6 +31,10 @@ let categories = [];
 let confirmAction = null;
 let confirmCancelAction = null;
 let toastTimer = null;
+let cloudReady = false;
+let cloudSession = 0;
+let pendingCloudSave = false;
+let cloudSaveTimer = null;
 
 function localDate(offsetDays = 0) {
   const date = new Date();
@@ -47,6 +55,131 @@ function starterItems() {
 function storageKey(id = activeId) { return `${STORAGE_PREFIX}${encodeURIComponent(id)}`; }
 function categoryStorageKey(id = activeId) { return `${CATEGORY_STORAGE_PREFIX}${encodeURIComponent(id)}`; }
 
+function setSyncStatus(state, label, title = label) {
+  const status = $("#sync-status");
+  const statusLabel = $("#sync-status-label");
+  if (!status || !statusLabel) return;
+  status.dataset.state = state;
+  statusLabel.textContent = label;
+  status.title = title;
+}
+
+async function cloudRpc(functionName, parameters) {
+  if (!CLOUD_ENABLED) throw new Error("雲端連線尚未設定");
+  const response = await fetch(`${CLOUD_URL}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      apikey: CLOUD_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(parameters),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    let detail = "";
+    try { detail = JSON.parse(text)?.message || ""; } catch (_) { detail = text; }
+    throw new Error(detail || `雲端回應錯誤 ${response.status}`);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+function cloudPayload() {
+  return {
+    schemaVersion: 1,
+    items,
+    categories,
+    clientUpdatedAt: new Date().toISOString(),
+  };
+}
+
+function validCloudPayload(payload) {
+  return payload && typeof payload === "object" && Array.isArray(payload.items) && Array.isArray(payload.categories);
+}
+
+function persistLocalState(id = activeId) {
+  localStorage.setItem(storageKey(id), JSON.stringify(items));
+  localStorage.setItem(categoryStorageKey(id), JSON.stringify(categories));
+}
+
+function applyCloudPayload(payload, id) {
+  items = payload.items.filter((item) => item && typeof item === "object");
+  categories = payload.categories.map(normalizeCategory).filter(Boolean);
+  if (!categories.length) categories = DEFAULT_CATEGORIES.map((category) => ({ ...category }));
+
+  const knownNames = new Set(categories.map((category) => category.name));
+  items.forEach((item) => {
+    const name = String(item.category || "").trim();
+    if (name && !knownNames.has(name)) {
+      categories.push({ name, icon: "📦", color: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length] });
+      knownNames.add(name);
+    }
+  });
+  persistLocalState(id);
+}
+
+async function flushCloudSave(expectedId = activeId, expectedSession = cloudSession) {
+  if (!CLOUD_ENABLED || !cloudReady || !pendingCloudSave || expectedId !== activeId || expectedSession !== cloudSession) return;
+  clearTimeout(cloudSaveTimer);
+  const payload = cloudPayload();
+  pendingCloudSave = false;
+  setSyncStatus("loading", "同步中", "正在將最新資料同步到雲端");
+  try {
+    await cloudRpc("save_restock_data", { p_account_id: expectedId, p_payload: payload });
+    if (expectedId !== activeId || expectedSession !== cloudSession) return;
+    if (pendingCloudSave) {
+      setSyncStatus("pending", "待同步", "有新的變更等待同步");
+      cloudSaveTimer = setTimeout(() => { void flushCloudSave(expectedId, expectedSession); }, 500);
+    } else {
+      setSyncStatus("synced", "已同步", "資料已安全保存到雲端");
+    }
+  } catch (error) {
+    if (expectedId !== activeId || expectedSession !== cloudSession) return;
+    pendingCloudSave = true;
+    setSyncStatus("error", "同步失敗", `資料已保存在本機；${error.message || "恢復網路後會重試"}`);
+  }
+}
+
+function queueCloudSave() {
+  pendingCloudSave = true;
+  if (!CLOUD_ENABLED) {
+    setSyncStatus("error", "未連線", "雲端連線尚未設定，資料目前只保存在本機");
+    return;
+  }
+  setSyncStatus("pending", "待同步", navigator.onLine === false ? "目前離線；恢復網路後會自動同步" : "資料正在等待同步");
+  if (!cloudReady || navigator.onLine === false) return;
+  clearTimeout(cloudSaveTimer);
+  const expectedId = activeId;
+  const expectedSession = cloudSession;
+  cloudSaveTimer = setTimeout(() => { void flushCloudSave(expectedId, expectedSession); }, 500);
+}
+
+async function initializeCloudForActiveId(id, session) {
+  if (!CLOUD_ENABLED) {
+    setSyncStatus("error", "未連線", "雲端連線尚未設定，資料目前只保存在本機");
+    return;
+  }
+  setSyncStatus("loading", "雲端連線中", "正在讀取雲端資料");
+  try {
+    const payload = await cloudRpc("get_restock_data", { p_account_id: id });
+    if (id !== activeId || session !== cloudSession) return;
+    cloudReady = true;
+    if (validCloudPayload(payload) && !pendingCloudSave) {
+      applyCloudPayload(payload, id);
+      render();
+      checkNotifications();
+      setSyncStatus("synced", "已同步", "已載入這個 ID 的雲端資料");
+      return;
+    }
+    if (payload !== null && !validCloudPayload(payload)) throw new Error("雲端資料格式不正確");
+    pendingCloudSave = true;
+    await flushCloudSave(id, session);
+  } catch (error) {
+    if (id !== activeId || session !== cloudSession) return;
+    cloudReady = false;
+    setSyncStatus("error", "同步失敗", `資料仍保存在本機；${error.message || "請稍後再試"}`);
+  }
+}
+
 function loadItems(id) {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey(id)) || "null");
@@ -57,7 +190,10 @@ function loadItems(id) {
   return initial;
 }
 
-function saveItems() { localStorage.setItem(storageKey(), JSON.stringify(items)); }
+function saveItems() {
+  localStorage.setItem(storageKey(), JSON.stringify(items));
+  queueCloudSave();
+}
 function validColor(value) { return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "#ffe58f"; }
 
 function normalizeCategory(entry, index = 0) {
@@ -102,7 +238,10 @@ function loadCategories(id, currentItems) {
   return loaded;
 }
 
-function saveCategories() { localStorage.setItem(categoryStorageKey(), JSON.stringify(categories)); }
+function saveCategories() {
+  localStorage.setItem(categoryStorageKey(), JSON.stringify(categories));
+  queueCloudSave();
+}
 
 function daysUntil(dateString) {
   const target = new Date(`${dateString}T12:00:00`);
@@ -188,6 +327,10 @@ function render() {
 }
 
 function showApp(id) {
+  clearTimeout(cloudSaveTimer);
+  cloudSession += 1;
+  cloudReady = false;
+  pendingCloudSave = false;
   activeId = id.trim();
   localStorage.setItem(ACTIVE_ID_KEY, activeId);
   items = loadItems(activeId);
@@ -197,9 +340,14 @@ function showApp(id) {
   render();
   window.scrollTo({ top: 0, behavior: "auto" });
   checkNotifications();
+  void initializeCloudForActiveId(activeId, cloudSession);
 }
 
 function showLogin() {
+  clearTimeout(cloudSaveTimer);
+  cloudSession += 1;
+  cloudReady = false;
+  pendingCloudSave = false;
   activeId = "";
   localStorage.removeItem(ACTIVE_ID_KEY);
   appView.hidden = true;
@@ -366,14 +514,26 @@ $("#clear-user-data-button").addEventListener("click", () => {
   $("#account-menu").hidden = true;
   askConfirm({
     title: `清除「${activeId}」的全部資料？`,
-    message: "此 ID 的補貨清單與自訂分類將永久刪除，重新登入時會恢復預設範例。",
+    message: "此 ID 的雲端補貨清單與自訂分類將永久刪除，重新登入時會恢復預設範例。",
     icon: "⚠️",
     confirmText: "確認清除",
-    onConfirm: () => {
-      localStorage.removeItem(storageKey());
-      localStorage.removeItem(categoryStorageKey());
-      showLogin();
-      showToast("此 ID 的資料已清除");
+    onConfirm: async () => {
+      const idToDelete = activeId;
+      if (!CLOUD_ENABLED || navigator.onLine === false) {
+        showToast("目前無法連線，雲端資料尚未清除");
+        return;
+      }
+      setSyncStatus("loading", "刪除中", "正在刪除這個 ID 的雲端資料");
+      try {
+        await cloudRpc("delete_restock_data", { p_account_id: idToDelete });
+        localStorage.removeItem(storageKey(idToDelete));
+        localStorage.removeItem(categoryStorageKey(idToDelete));
+        showLogin();
+        showToast("此 ID 的本機與雲端資料已清除");
+      } catch (error) {
+        setSyncStatus("error", "刪除失敗", error.message || "請稍後再試");
+        showToast("清除失敗，資料仍保留；請確認網路後再試");
+      }
     },
   });
 });
@@ -527,6 +687,19 @@ $("#confirm-submit").addEventListener("click", () => {
 const rememberedId = localStorage.getItem(ACTIVE_ID_KEY);
 if (rememberedId) showApp(rememberedId);
 else { loginView.hidden = false; appView.hidden = true; }
+
+window.addEventListener?.("online", () => {
+  if (!activeId) return;
+  if (cloudReady) {
+    if (pendingCloudSave) void flushCloudSave(activeId, cloudSession);
+    else setSyncStatus("synced", "已連線", "已恢復網路連線");
+  } else {
+    void initializeCloudForActiveId(activeId, cloudSession);
+  }
+});
+window.addEventListener?.("offline", () => {
+  if (activeId) setSyncStatus("pending", "離線保存", "目前離線；變更會先保存在這台裝置，恢復網路後自動同步");
+});
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("./sw.js").catch(() => {});

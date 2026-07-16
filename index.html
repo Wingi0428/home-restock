@@ -23,7 +23,7 @@
           <input id="login-id" name="loginId" placeholder="例如：gigi 或 520" maxlength="30" autocomplete="username" required />
           <button class="primary-button login-button" type="submit">開始記錄 <span aria-hidden="true">→</span></button>
         </form>
-        <p class="local-note"><span aria-hidden="true">🔒</span> 無須密碼 · 各 ID 資料分開保存在這台裝置的瀏覽器中</p>
+        <p class="local-note"><span aria-hidden="true">☁️</span> 無須密碼 · 相同 ID 可在手機與電腦同步資料</p>
       </section>
     </main>
 
@@ -35,6 +35,9 @@
             <span>家用補貨提醒</span>
           </a>
           <div class="header-actions">
+            <span id="sync-status" class="sync-status" data-state="loading" role="status" aria-live="polite" title="正在連線雲端">
+              <i aria-hidden="true"></i><span id="sync-status-label">雲端連線中</span>
+            </span>
             <button id="notification-button" class="notification-button" type="button" aria-label="開啟到期通知">
               <span aria-hidden="true">🔔</span><span class="notification-label">開啟提醒</span>
             </button>
@@ -89,7 +92,7 @@
 
           <aside class="tip-strip">
             <span class="tip-bell" aria-hidden="true">🔔</span>
-            <p><strong>小提醒：</strong>到期提醒會在開啟網站時檢查；允許瀏覽器通知後，手機也會顯示提示。</p>
+            <p><strong>小提醒：</strong>資料會自動同步到雲端；離線時仍可編輯，恢復網路後會自動補同步。</p>
             <img class="footer-art" src="./assets/playful-sticker-assets.png" alt="熟睡的三花貓貼紙" />
           </aside>
         </div>
@@ -200,6 +203,7 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="./cloud-config.js"></script>
     <script src="./app.js" defer></script>
   </body>
 </html>

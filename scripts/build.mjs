@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const dist = resolve(root, "dist");
-const files = ["index.html", "style.css", "app.js", "sw.js", "manifest.webmanifest", ".nojekyll"];
+const files = ["index.html", "style.css", "cloud-config.js", "app.js", "sw.js", "manifest.webmanifest", ".nojekyll"];
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(resolve(dist, "assets"), { recursive: true });
